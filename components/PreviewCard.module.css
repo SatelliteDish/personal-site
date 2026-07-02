@@ -1,0 +1,49 @@
+.card {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0 4px 16px;
+  border-left: 3px solid var(--border-strong);
+}
+
+.teal {
+  border-left-color: var(--accent-teal);
+}
+
+.pink {
+  border-left-color: var(--accent-pink);
+}
+
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.teal .eyebrow {
+  color: var(--accent-teal-text);
+}
+
+.pink .eyebrow {
+  color: var(--accent-pink-text);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.card:hover .title {
+  text-decoration: underline;
+}
+
+.description {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}

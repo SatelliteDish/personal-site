@@ -1,0 +1,434 @@
+---
+title: "Rust Iterators Explained in Depth"
+date: "2025-11-26"
+excerpt: "A deep dive into Rust iterators, explaining how they work, common patterns, and useful utilities."
+tags: ["rust","tutorial"]
+---
+Iterators are a core part of Rust; even if you don't think you've used them, you likely have. As you might have guessed from the name all forms of iteration in Rust require an [`Iterator`](https://doc.rust-lang.org/std/iter/trait.Iterator.html), including things like for loops or the [`map`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map) function. Many beginners are intimidated by iterators and don't put in the time to truly understand them. This article will walk you through everything you need to know about iterators, how to create them, utilize them, convert them, and more. To find all the code examples used here, as well as much more check out my GitHub repository [here](https://github.com/rust-examples-collection/rust-iterator-examples).
+
+## Fundamentals
+
+The most common way to use iterators is through for loops, which are just a simple interface for working with an `Iterator`.
+```rust
+let mut vec = Vec::new();
+for i in 0..10 { // Creates an iterator starting at 0, ending on 9
+ vec.push(i);
+}
+assert_eq!(vec, vec![0,1,2,3,4,5,6,7,8,9]);
+```
+
+The `start..end` syntax creates a [`Range`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map), which is one of the many types of `Iterator`. In Rust, iteration isn't just a feature of collections or loops, iterators are structs that exist independently of how they're used. In this example you can see a `Range` is a perfectly valid value for a variable:
+
+```rust
+let range = 0..10;
+let vec = vec![0,1,2,3,4,5,6,7,8,9];
+let vec_iter = vec.into_iter();
+// A collection is not an iterator, `into_iter` converts
+
+// Comparing iterators directly requires this syntax
+// I'll go over a method that makes this easier soon
+assert!(range.eq(vec_iter));
+```
+
+---
+
+## Iteration Traits
+
+There are three main traits for dealing with iterators: [`Iterator`](https://doc.rust-lang.org/std/iter/trait.Iterator.html), [`IntoIterator`](https://doc.rust-lang.org/std/iter/trait.IntoIterator.html), and [`FromIterator`](https://doc.rust-lang.org/std/iter/trait.FromIterator.html). These traits are what make iterators so flexible in Rust.
+
+An `Iterator` definition requires two things: the type of the values being iterated over ([`Item`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#associatedtype.Item)), and a function to get the next value ([`next`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next)), which includes when to stop.`next` returns `Option<Item>`, when `None` is returned iteration stops. This is how for loops work, they essentially just call `next` and unwrap the `Some(Item)` values, and stop on `None`.
+
+```rust
+let mut range = 0..3;
+
+assert_eq!(Some(0), range.next());
+assert_eq!(Some(1), range.next());
+assert_eq!(Some(2), range.next());
+assert_eq!(None, range.next());
+```
+
+A very important detail is that because an iterator only knows about what's next, they don't need to know about the whole sequence at once. This seems obvious and inconsequential, but *this is incredibly important to understanding iterators in Rust*. This is what people mean when they say that in Rust iterators are **lazy**, we'll go over this more in detail later.
+
+`IntoIterator` is typically defined on a collection and defines the default way to convert the type into an `Iterator`. You only need to define the conversion function `into_iter` and the type of iterator this will become, which includes the type of item iterated over.
+
+`FromIterator` is more complex, it's typically used to turn an iterator into a collection. This is where the `collect` function comes in, which allows you to turn an `Iterator` into another type. `collect` can't infer the type being collected to without explicitly declaring it
+
+```rust
+// You can declare the type on the variable like this
+let vec: Vec<usize> = (0..5).collect();
+assert_eq!(vec![0,1,2,3,4], vec);
+
+// or inline with the turbofish ::<T> like this
+assert_eq!(vec![0,1,2,3,4], (0..5).collect::<Vec<usize>>());
+```
+
+`collect` and `FromIterator` are far more powerful than I can show here, `collect` can transform iterators into any type that implements `FromIterator`, handle error propagation with `Result`, and you can even `collect` into nested structures. For a deep dive into `collect`'s capabilities, check out the [dedicated tutorial in the GitHub repository](https://github.com/rust-examples-collection/rust-iterator-examples/blob/master/examples/tutorial/src/collect.rs) for more information.
+
+### For Loops
+
+For loops don't actually operate on types that implement `Iterator`, it operates on types that implement `IntoIterator` and it calls `.into_iter()`. This is why you can use a for loop on a `Vec<T>` directly! You might notice something strange about this, as it was able to operate on a `Range` just fine. This is because of a little convenience Rust provides by default, all types that implement `Iterator` get a free `IntoIterator` implementation which just returns itself. This means anywhere something needs a type that implements `IntoIterator`, you can always just pass an `Iterator` directly.
+
+### Related Functions
+
+Though not directly related to `IntoIterator`, there are often three other functions implemented without a defining trait.
+- `iter` gives you an iterator over &T, so it's non-consuming and immutable access.
+- `iter_mut` gives you an iterator over &mut T, so it's non-consuming but mutable access.
+- `into_iter` gives you an iterator over T, so it's both consuming and mutable.
+
+```rust
+let items = vec![0,1,2,3,4];
+
+for _ in items.iter() {} // These
+for _ in &items {}       // are equal
+
+for _ in items.iter_mut() {} // So are
+for _ in &mut items {}       // these
+
+for _ in items.into_iter() {} // These
+for _ in items {}             // too
+```
+
+---
+
+## Adapters
+
+Now that we have the basics out of the way let's get into the real meat of what makes iterators powerful: adapters. Adapters are a really simple concept, it's just a function that turns one iterator into another. All adapters return a struct that implements `Iterator`, so they can be chained together to perform very complex operations using simple building blocks.
+
+### [`rev`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.rev)
+
+Let's start with one of the simplest adapters, `rev`. All it does is reverse the iterator, as in the last items become the first. It doesn't reverse the direction in-place, you can't get back consumed values.
+
+```rust
+let forward = vec![0,1,2];
+let reversed: Vec<_> = forward.into_iter().rev().collect();
+// `forward` is consumed, so it is no longer valid from here
+
+assert_eq!(vec![2,1,0], reversed);
+```
+
+### [`enumerate`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.enumerate)
+
+Next we'll go over a slightly more complex example. Sometimes you want to iterate over both a value and its index, but to do so without using adapters is a little frustrating.
+
+```rust
+let items = vec!["Hello", "World!"];
+// This isn't complex, but it ruins a lot of what
+// For loops can usually do for you
+for i in 0..items.len() { // You have to manually calculate the length
+ let current_item = items[i]; // And manually assign the variable
+ // …
+}
+```
+
+This is a very basic example but even that illustrates how without using an adapter you pretty much have to lose most of what makes for loops convenient. This is where the `enumerate` adapter comes in, it turns an iterator over `T` to an iterator over `(usize, T)` where the `usize` is the index.
+
+```rust
+let items = vec!["Hello", "World!"];
+for (i, current_item) in items.into_iter().enumerate() {
+ // …
+}
+```
+
+This is especially useful with other adapters because the indices always match the position relative to when `enumerate` was called, even when the value hasn't been evaluated yet.
+
+```rust
+let enum_first: Vec<(usize,char)> = vec!['H','e','l','l','o']
+                    .into_iter()
+                    .enumerate()
+                    .rev()
+                    .collect();
+assert_eq!(enum_first, vec![(4,'o'), (3,'l'), (2,'l'), (1,'e'), (0, 'H')]);
+
+let rev_first: Vec<(usize,char)> = vec!['w','o','r','l','d','!']
+                    .into_iter()
+                    .rev()
+                    .enumerate()
+                    .collect();
+assert_eq!(rev_first, vec![(0,'!'),(1,'d'), (2,'l'), (3,'r'), (4,'o'), (5, 'w')]);
+```
+
+There is also a more general counterpart to `enumerate` called [`zip`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.zip), which joins two iterators into an iterator over both their values at once.
+
+### Quick Intro to Closures
+
+Some of the most useful adapters take closures as arguments, so I'll go over them briefly for those who don't already know about them. A closure is just a function, very similar to a lambda function or an arrow function from JavaScript. They are defined like this:
+
+```rust
+|arg1: type, arg2: type| { expression }
+```
+
+You use the space between `||` to define arguments, and the braces surrounding the expression are optional for one line statements. Explicitly typing arguments is optional if they can be inferred. They can return values just like any other function, and they *can* capture local variables but that's where they start to get a bit complex and that's out of scope for this article. They can also be assigned to a variable and called like a function:
+
+```rust
+let add = |x,y| x+y;
+assert_eq!(add(1,5), 6);
+assert_eq!(add(12,-5), 7);
+```
+
+You can read more about closures in the [Rust book](https://doc.rust-lang.org/book/ch13-01-closures.html)
+
+### [`map`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map)
+
+`map` is probably the most used adapter, and it's simple but powerful. It takes a closure that is run on each item, and returns something else. The returned value replaces the original value in place. The function takes in the value being replaced so you can use it to derive the new value, or just discard the value and overwrite it without using it.
+
+```rust
+let squares = (1..6).map(|x| x*x).collect::<Vec<usize>>();
+assert_eq!(vec![1,4,9,16,25], squares);
+
+// This also works with different types of Item
+let words: Vec<&str> = vec!["Hello", "from", "Canada"];
+let lens: Vec<usize> = words.into_iter().map(|word| word.len()).collect();
+assert_eq!(vec![5,4,6], lens);
+```
+#### `Result` Tangent
+
+You may have used `map` with non iterator types, and it always works much the same. The most common example would be with `Option` and `Result` which have both a `map` and `Result` also has a `tap_err` that work just like this. On a `map` gets passed the unwrapped value `T` of the `Ok(T)` or `Some(T)` variant only if it is `Ok` or `Some`. `map_err` is the complement of this, it gets passed the unwrapped error `E` from the `Err(E)` variant **only** if it is an `Err` variant. There is no `None` equivalent because there is no value contained in a `None`, if you want to convert it you need to convert the `Option` to a `Result` using something like [`ok_or`](https://doc.rust-lang.org/std/option/enum.Option.html#method.ok_or). None of these are associated with the `Iterator` trait, but they work in a very similar way and are incredibly useful.
+
+### [`filter`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter)
+
+`filter` is another really useful one, it takes a closure that runs on each item like `map` but this closure returns a `bool`. Any items in the iterator for which the closure evaluates to `false` are filtered out.
+
+```rust
+let evens = (0..10).filter(|x| x % 2 == 0).collect::<Vec<usize>>();
+assert_eq!(vec![0,2,4,6,8], evens);
+```
+
+[`filter_map`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter_map) does a `filter` and `map` in one, using an `Option` to determine what gets filtered with the value `T` in `Some(T)`replacing the original value and `None` values being removed.
+
+```rust
+let even_squares = (0..10).filter_map(|x| if x % 2 == 0 { Some(x*x) } else { None }).collect::<Vec<usize>>();
+assert_eq!(vec![0,4,16,36,64], even_squares);
+```
+
+### [`fold`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.fold) and [`reduce`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.reduce)
+
+`fold` and `reduce` are not adapters but they are essential tools for working with them, both of them take the iterator and reduce it to a single value. `fold` takes two arguments, an initial value, and a closure which itself takes two arguments: the accumulator, and the current item. The value returned will be used as the next accumulator, and this is called with each item in the iterator in sequence. The final return value is the final accumulator. This might sound complicated, but it's not as intimidating as it may sound, let's use a very simple example:
+
+```rust
+let sum = (1..11).fold(0,|sum, i| sum + i);
+assert_eq!(55, sum);
+```
+
+This would get the sum of numbers in the iterator (1-10) and save the result (55) in `sum`. `reduce` is nearly the same thing but with two key differences. The first is that it uses the first value in the iterator as the initial accumulator value, and the second is that it returns an `Option`. The reason it returns an `Option` is because if the iterator is empty is has to return `None`. If you `fold` an empty iterator it will return the initial value, but there is no initial value on an `empty` reduce. This means that you write a reduce statement equivalent to the previous fold like this
+
+```rust
+let sum = (1..11).reduce(|sum, i| sum + i).unwrap_or(0);
+assert_eq!(55, sum);
+```
+
+There are other useful functions on `Iterator`, but this article is going to be long enough already. It would be criminal to mention `map` without `fold` or `reduce` though, `map` and `reduce` is a core functional pattern.
+
+### [`take`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.take) and [`skip`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.skip)
+`take` is really simple but deceptively useful, it takes a `usize` and returns at most that many elements from the front. If there are less than the requested items left it just returns what is left. This is incredibly useful when working with data that is large enough you don't want it all in memory at once, as you can `.take` one chunk at a time. It gracefully handles asking for too much, so you don't need to know the size beforehand.
+
+```rust
+assert_eq!(
+ vec![4,5,6,7],
+ (4..).take(4).collect::<Vec<usize>>(),
+);
+assert_eq!(
+ vec![0,1,2],
+ (0..3).take(999).collect::<Vec<usize>>(),
+);
+```
+
+Without the `take` the first example it would run because Rust can tell the iterator is has no known end. We'll go over infinite iterators a little more soon.
+
+`skip` is the complement to `take`, where it skips the given amount of items. This can also be really useful for data chunking when chunks can be partially consumed and resumed at later points. If you remember where you left off, you can just `skip` back:
+
+```rust
+assert_eq!(
+  vec![0,1,2],
+  (0..).take(3).collect(),
+);
+
+assert_eq!(
+  vec![3,4,5],
+  (0..).skip(3).take(3).collect(),
+);
+```
+
+A practical example of this is implementing [HTTP range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Range_requests) which give you a range of bytes to provide, so you can use `skip` and `take` to get the exact range requested in an efficient manner.
+
+## Composability
+While adapters are powerful on their own, they really shine when chained together.
+
+```rust
+let values: Vec<usize> = (0..).step_by(3)
+  .skip_while(|x| x % 64 != 2)
+  .take(15)
+  .filter_map(|x| {
+    if x % 2 == 0 {
+      Some(x/3)
+    } else {
+      None
+    }
+  }).collect();
+assert_eq!(values, vec![22, 24, 26, 28, 30, 32, 34, 36]);
+```
+
+By chaining adapters you can accomplish a lot of complex logic in an idiomatic and easy to read way. It often involves less nesting and fewer unnecessary variables as well. There are far more adapters available than I can show here, to see them all you can check out the [official docs](https://doc.rust-lang.org/std/iter/trait.Iterator.html), or check [this reference I made](https://github.com/rust-examples-collection/rust-iterator-examples/blob/master/examples/reference/src/adapters.rs) that shows every adapter, what they do, and categorizes them by effect.
+
+---
+
+## Laziness
+Iterators are **lazy**, which means they don't evaluate items until they're needed. One of the most immediate benefits is this means converting things to an iterator is trivially cheap. If you had a collection of a million items you could turn it into an iterator and take 5, and it would only evaluate the 5 iterations. This is really useful, but it does cause some behaviour that is incredibly unintuitive at first. The classic example is side effects in `map`:
+
+```rust
+let _ = (0..11).map(|x| println!("{x}") )
+```
+
+This causes nothing to be printed, as items in the iterator aren't evaluated until they are consumed.
+
+```rust
+let _ = (0..11).map(|x| println!("{x}") ).collect::<Vec<_>>();
+```
+
+Just adding a `collect` causes all the items to be evaluated, so you'd see the numbers 0-10 printed each on their own line. This is why infinite iterators can exist, you can only ever actually evaluate a finite amount of items, so they're only infinite in theory. You have to be careful when using infinite iterators though, because using something that evaluates the entire iterator will cause an infinite loop.
+
+```rust
+let mut squares = (1..).map(|x| x*x);
+// Mapping an infinite iterator is fine, because
+// each element is still evaluated lazily
+assert_eq!(Some(1), squares.next());
+assert_eq!(Some(4), squares.next());
+assert_eq!(Some(9), squares.next());
+assert_eq!(Some(16), squares.next());
+assert_eq!(Some(25), squares.next());
+```
+
+This works fine, but calling something like `sum` or `collect`, or even `len` on `squares` would cause an infinite loop. Iterators can also be of indeterminate size, for example a list input for a CLI app could be implemented as an iterator. Each time `next` is called it prompts the user to enter another entry, and on a specific input it returns `None` and finishes iteration. When the user will stop is never known by anyone but the user, but because iterators are lazy this doesn't matter.
+
+---
+
+## Custom Iterators
+
+Now let's finish up by creating some custom iterators to really see how it works.
+
+```rust
+struct Counter {
+ value: usize,
+ limit: usize,
+}
+
+impl Counter {
+  pub fn new(limit: usize) -> Self {
+    Self {
+      value: 0,
+      limit,
+    }
+  }
+}
+
+// Implementing iterator is really simple
+impl Iterator for Counter {
+
+  // All you need to do is define the type of the items
+  type Item = usize;
+
+  // And how to move on to the next value, and when to end
+  fn next(&mut self) -> Option<Self::Item> {
+    let current = self.value;
+    self.value += 1;
+
+    // This makes the limit inclusive, unlike a range
+    if current > self.limit {
+      None // When `None` is returned iteration ends
+    } else {
+      Some(current)
+    }
+  }
+}
+```
+
+This is a trivial example that basically just creates a type that acts like a range, but the upper bound is inclusive. Now we can use a counter like any other iterator
+
+```rust
+let mut counter = Counter::new(3);
+
+assert_eq!(Some(0), counter.next());
+assert_eq!(Some(1), counter.next());
+assert_eq!(Some(2), counter.next());
+assert_eq!(Some(3), counter.next());
+assert_eq!(None, counter.next());
+```
+
+As mentioned before, implementing `Iterator` also means `Counter` implements `IntoIterator` which means for loops now work
+
+```rust
+for _ in Counter::new(5) {}
+```
+
+And we even get all the adapters for free as well
+
+```rust
+let mut counter = Counter::new(100).step_by(30);
+
+assert_eq!(Some(0), counter.next());
+assert_eq!(Some(30), counter.next());
+assert_eq!(Some(60), counter.next());
+assert_eq!(Some(90), counter.next());
+assert_eq!(None, counter.next());
+```
+
+That example was a little trivial, so let's create the CLI list input iterator mentioned previously.
+
+```rust
+use std::io;
+pub struct CliListInput<'a> {
+  message: Option<&'a str>,
+}
+
+impl<'a> CliListInput<'a> {
+  pub fn new(message: Option<&'a str>) -> Self {
+    Self {
+      message,
+    }
+  }
+}
+
+impl<'a> Iterator for CliListInput<'a> {
+  type Item = String;
+
+  fn next(&mut self) -> Option<Self::Item> {
+
+  let mut out = String::new();
+
+  if let Some(msg) = self.message {
+    println!("{msg}");
+  }
+
+  match io::stdin()
+    .read_line(&mut out) {
+      Ok(size) => {
+        if size == 1 || size == 0 { // Only newline or empty
+          None
+        } else {
+          // `out` has a trailing newline
+          out.pop();
+          Some(out)
+        }
+      },
+      Err(_) => None,
+    }
+  }
+}
+```
+
+Now you can use a `CliListInput` just like any other iterator
+
+```rust
+println!("Please enter an item, leave blank to exit:");
+let list: Vec<_> = CliListInput::new(None).collect();
+// We can collect any iterator
+```
+
+When this is executed it prints the message prompting you to enter items, and waits for input. You can enter items and press enter to move to the next one, it automatically splits on newlines. At the end list contains a `Vec` full of the items you wrote, each line a separate entry. Even though "an Iterator of indeterminate size" sounds intimidating, you can see here that it's really no more complex than any other type of iterator.
+
+---
+
+## Conclusion
+
+As you can see, iterators in Rust are far different than that of many other languages. They're incredibly powerful without much computational overhead, and they really aren't that complicated once you take the time to understand them.
+
+Hopefully this has helped you to understand iterators if you didn't already, and if you did hopefully you've still learned something new. This is far from everything there is to know, but this covers all the basics you need to get you using and creating iterators with confidence. For more information about iterators the best place to go will always be the [official docs](https://doc.rust-lang.org/std/iter/index.html), and I would recommend browsing the available adapters. For additional interactive examples and references you can check out my [GitHub repository](https://github.com/rust-examples-collection/rust-iterator-examples/tree/master).

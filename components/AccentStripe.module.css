@@ -1,0 +1,16 @@
+.stripe {
+  height: 5px;
+  background: linear-gradient(
+    to right,
+    var(--accent-amber) 0%,
+    var(--accent-amber) 20%,
+    var(--accent-coral) 20%,
+    var(--accent-coral) 40%,
+    var(--accent-pink) 40%,
+    var(--accent-pink) 60%,
+    var(--accent-purple) 60%,
+    var(--accent-purple) 80%,
+    var(--accent-teal) 80%,
+    var(--accent-teal) 100%
+  );
+}

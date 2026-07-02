@@ -1,0 +1,55 @@
+.drawer {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  padding: 14px 18px;
+  margin: 28px 0;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--accent-teal-text);
+  list-style: none; /* hide the default marker so our own chevron is the only one */
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.chevron {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.drawer[open] .chevron {
+  transform: rotate(90deg);
+}
+
+.list {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.item {
+  margin-bottom: 2px;
+}
+
+.item a {
+  display: block;
+  padding: 5px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.item a:hover {
+  color: var(--accent-teal-text);
+}

@@ -1,0 +1,43 @@
+.nav {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-page);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.links {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.links a:hover {
+  color: var(--text-primary);
+}
+
+@media (max-width: 480px) {
+  .links {
+    gap: 14px;
+  }
+}
