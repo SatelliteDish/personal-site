@@ -4,6 +4,14 @@ date: "2025-11-26"
 excerpt: "A deep dive into Rust iterators, explaining how they work, common patterns, and useful utilities."
 tags: ["rust","tutorial"]
 ---
+
+<Image
+  src="/sunset0.jpg"
+  alt="A beautiful sunset"
+  width={700}
+  height={400}
+/>
+
 Iterators are a core part of Rust; even if you don't think you've used them, you likely have. As you might have guessed from the name all forms of iteration in Rust require an [`Iterator`](https://doc.rust-lang.org/std/iter/trait.Iterator.html), including things like for loops or the [`map`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map) function. Many beginners are intimidated by iterators and don't put in the time to truly understand them. This article will walk you through everything you need to know about iterators, how to create them, utilize them, convert them, and more. To find all the code examples used here, as well as much more check out my GitHub repository [here](https://github.com/rust-examples-collection/rust-iterator-examples).
 
 ## Fundamentals
@@ -17,7 +25,7 @@ for i in 0..10 { // Creates an iterator starting at 0, ending on 9
 assert_eq!(vec, vec![0,1,2,3,4,5,6,7,8,9]);
 ```
 
-The `start..end` syntax creates a [`Range`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map), which is one of the many types of `Iterator`. In Rust, iteration isn't just a feature of collections or loops, iterators are structs that exist independently of how they're used. In this example you can see a `Range` is a perfectly valid value for a variable:
+The `start..end` syntax creates a [`Range`](https://doc.rust-lang.org/std/ops/struct.Range.html), which is one of the many types of `Iterator`. In Rust, iteration isn't just a feature of collections or loops, iterators are structs that exist independently of how they're used. In this example you can see a `Range` is a perfectly valid value for a variable:
 
 ```rust
 let range = 0..10;
@@ -182,7 +190,7 @@ assert_eq!(vec![5,4,6], lens);
 ```
 #### `Result` Tangent
 
-You may have used `map` with non iterator types, and it always works much the same. The most common example would be with `Option` and `Result` which have both a `map` and `Result` also has a `tap_err` that work just like this. On a `map` gets passed the unwrapped value `T` of the `Ok(T)` or `Some(T)` variant only if it is `Ok` or `Some`. `map_err` is the complement of this, it gets passed the unwrapped error `E` from the `Err(E)` variant **only** if it is an `Err` variant. There is no `None` equivalent because there is no value contained in a `None`, if you want to convert it you need to convert the `Option` to a `Result` using something like [`ok_or`](https://doc.rust-lang.org/std/option/enum.Option.html#method.ok_or). None of these are associated with the `Iterator` trait, but they work in a very similar way and are incredibly useful.
+You may have used `map` with non iterator types, and it always works much the same. The most common example would be with `Option` and `Result` which have both a `map` and `Result` also has a `map_err` that work just like this. On a `map` gets passed the unwrapped value `T` of the `Ok(T)` or `Some(T)` variant only if it is `Ok` or `Some`. `map_err` is the complement of this, it gets passed the unwrapped error `E` from the `Err(E)` variant **only** if it is an `Err` variant. There is no `None` equivalent because there is no value contained in a `None`, if you want to convert it you need to convert the `Option` to a `Result` using something like [`ok_or`](https://doc.rust-lang.org/std/option/enum.Option.html#method.ok_or). None of these are associated with the `Iterator` trait, but they work in a very similar way and are incredibly useful.
 
 ### [`filter`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter)
 
@@ -209,7 +217,7 @@ let sum = (1..11).fold(0,|sum, i| sum + i);
 assert_eq!(55, sum);
 ```
 
-This would get the sum of numbers in the iterator (1-10) and save the result (55) in `sum`. `reduce` is nearly the same thing but with two key differences. The first is that it uses the first value in the iterator as the initial accumulator value, and the second is that it returns an `Option`. The reason it returns an `Option` is because if the iterator is empty is has to return `None`. If you `fold` an empty iterator it will return the initial value, but there is no initial value on an `empty` reduce. This means that you write a reduce statement equivalent to the previous fold like this
+This would get the sum of numbers in the iterator (1-10) and save the result (55) in `sum`. `reduce` is nearly the same thing but with two key differences. The first is that it uses the first value in the iterator as the initial accumulator value, and the second is that it returns an `Option`. The reason it returns an `Option` is because if the iterator is empty it has to return `None`. If you `fold` an empty iterator it will return the initial value, but there is no initial value on an `empty` reduce. This means that you write a reduce statement equivalent to the previous fold like this
 
 ```rust
 let sum = (1..11).reduce(|sum, i| sum + i).unwrap_or(0);
@@ -219,7 +227,7 @@ assert_eq!(55, sum);
 There are other useful functions on `Iterator`, but this article is going to be long enough already. It would be criminal to mention `map` without `fold` or `reduce` though, `map` and `reduce` is a core functional pattern.
 
 ### [`take`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.take) and [`skip`](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.skip)
-`take` is really simple but deceptively useful, it takes a `usize` and returns at most that many elements from the front. If there are less than the requested items left it just returns what is left. This is incredibly useful when working with data that is large enough you don't want it all in memory at once, as you can `.take` one chunk at a time. It gracefully handles asking for too much, so you don't need to know the size beforehand.
+`take` is really simple but deceptively useful, it takes a `usize` and returns at most that many elements from the front. If there are less than the requested items left it just returns what is left. This is incredibly useful when working with data that is large enough that you don't want it all in memory at once, as you can `.take` one chunk at a time. It gracefully handles asking for too much, so you don't need to know the size beforehand.
 
 ```rust
 assert_eq!(
@@ -232,7 +240,7 @@ assert_eq!(
 );
 ```
 
-Without the `take` the first example it would run because Rust can tell the iterator is has no known end. We'll go over infinite iterators a little more soon.
+Without `take` the first example it would run forever because the iterator has no end. We'll go over infinite iterators a little more soon.
 
 `skip` is the complement to `take`, where it skips the given amount of items. This can also be really useful for data chunking when chunks can be partially consumed and resumed at later points. If you remember where you left off, you can just `skip` back:
 
@@ -297,7 +305,7 @@ assert_eq!(Some(16), squares.next());
 assert_eq!(Some(25), squares.next());
 ```
 
-This works fine, but calling something like `sum` or `collect`, or even `len` on `squares` would cause an infinite loop. Iterators can also be of indeterminate size, for example a list input for a CLI app could be implemented as an iterator. Each time `next` is called it prompts the user to enter another entry, and on a specific input it returns `None` and finishes iteration. When the user will stop is never known by anyone but the user, but because iterators are lazy this doesn't matter.
+This works fine, but calling something like `sum` or `collect` on `squares` would cause this to loop infinitely. Iterators can also be of indeterminate size, for example a list input for a CLI app could be implemented as an iterator. Each time `next` is called it prompts the user to enter another entry, and on a specific input it returns `None` and finishes iteration. When the user will stop is never known by anyone but the user, but because iterators are lazy this doesn't matter.
 
 ---
 

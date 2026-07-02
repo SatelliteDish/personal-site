@@ -2,6 +2,8 @@ import type { ComponentPropsWithoutRef } from "react";
 import type { MDXComponents } from "next-mdx-remote-client/rsc";
 import Figure from "./Figure";
 import styles from "./mdx.module.css";
+import Image from "next/image";
+
 
 export const mdxComponents: MDXComponents = {
   h2: ({ className, ...props }: ComponentPropsWithoutRef<"h2">) => (
@@ -58,4 +60,5 @@ export const mdxComponents: MDXComponents = {
   td: ({ className, ...props }: ComponentPropsWithoutRef<"td">) => (
     <td className={styles.td} {...props} />
   ),
+  Image,
 };
