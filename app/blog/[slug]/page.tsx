@@ -29,7 +29,7 @@ export function generateStaticParams() {
   return getAllPostSlugs().map((slug) => ({ slug }));
 }
 
-// No routes beyond the ones generateStaticParams returns — required
+// No routes beyond the ones generateStaticParams returns - required
 // for `output: "export"`, since there's no server left at request time
 // to render anything on demand.
 export const dynamicParams = false;
@@ -72,9 +72,9 @@ export async function generateMetadata({
   const { slug } = await params;
   try {
     const { title } = getPostFrontmatter(slug);
-    return { title: `${title} — Michael Vitale` };
+    return { title: `${title} - Michael Vitale` };
   } catch {
-    return { title: "Post not found — Michael Vitale" };
+    return { title: "Post not found - Michael Vitale" };
   }
 }
 
@@ -114,7 +114,7 @@ export default async function BlogPostPage({ params }: PageProps) {
     throw error;
   }
 
-  const { title, date, tags = [] } = frontmatter;
+  const { title, date, modified, tags = [] } = frontmatter;
 
   return (
     <>
@@ -131,6 +131,7 @@ export default async function BlogPostPage({ params }: PageProps) {
           <h1 className={styles.title}>{title}</h1>
           <div className={styles.meta}>
             <time dateTime={date}>{formatDate(date)}</time>
+            <span>Last Modified: <time dateTime={modified as string}>{formatDate(modified as string)}</time></span>
             {tags.length > 0 && (
               <div className={styles.tags}>
                 {tags.map((tag) => (
