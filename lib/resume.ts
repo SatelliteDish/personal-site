@@ -10,8 +10,9 @@ export interface Job {
 export const contact = {
   location: "Nanaimo, BC",
   email: "michael@sortofrad.com",
-  website: "sortofrad.com",
+  website: "notsocials.com",
   github: "github.com/SatelliteDish",
+  linkedIn: "linkedin.com/in/michael-a-j-vitale",
 };
 
 export const summary =
@@ -95,9 +96,3 @@ export const skillGroups: { label: string; items: string[] }[] = [
     items: ["C", "C#", "Python", "Bash", "PowerShell", "Java", "SQL"],
   },
 ];
-
-export const education = {
-  name: "High School Diploma",
-  school: "Chatelech Secondary School",
-  location: "Sechelt, BC",
-};

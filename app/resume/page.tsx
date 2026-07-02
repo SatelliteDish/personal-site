@@ -9,7 +9,6 @@ import {
   accomplishments,
   experience,
   skillGroups,
-  education,
 } from "@/lib/resume";
 import styles from "./page.module.css";
 
@@ -25,15 +24,17 @@ export default function ResumePage() {
       <main className="container">
         <header className={styles.header}>
           <h1 className={styles.heading}>Resume</h1>
-          <p className={styles.roleLine}>Full Stack Engineer</p>
+          <p className={styles.roleLine}>Full Stack Engineer - {contact.location}</p>
           <div className={styles.contactRow}>
-            <span>{contact.location}</span>
             <a href={`mailto:${contact.email}`}>{contact.email}</a>
             <a href={`https://${contact.website}`} target="_blank" rel="noreferrer">
               {contact.website}
             </a>
             <a href={`https://${contact.github}`} target="_blank" rel="noreferrer">
               {contact.github}
+            </a>
+            <a href={`https://${contact.linkedIn}`} target="_blank" rel="noreferrer">
+              {contact.linkedIn}
             </a>
           </div>
         </header>
@@ -88,14 +89,6 @@ export default function ResumePage() {
               <p className={styles.skillPlain}>{group.items.join(" · ")}</p>
             </div>
           ))}
-        </section>
-
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Education</h2>
-          <p className={styles.eduName}>{education.name}</p>
-          <p className={styles.eduSub}>
-            {education.school}, {education.location}
-          </p>
         </section>
       </main>
 

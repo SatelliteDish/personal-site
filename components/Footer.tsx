@@ -13,6 +13,9 @@ export default function Footer() {
           <a href={`https://${contact.github}`} target="_blank" rel="noreferrer">
             GitHub
           </a>
+          <a href={`https://${contact.linkedIn}`} target="_blank" rel="noreferrer">
+            LinkedIn
+          </a>
           <a href={`https://${contact.website}`} target="_blank" rel="noreferrer">
             {contact.website}
           </a>
