@@ -1,0 +1,436 @@
+---
+title: "Rust HashMap Interactions Made Simple: The Entry API"
+date: "2025-11-03"
+modified: "2026-07-04"
+excerpt: "Rust HashMaps are a commonly used feature that has a lot more to offer than most people realize. Learn more about the entry API, one of the many powerful features they have to offer"
+tags: ["rust","tutorial"]
+---
+
+<Image
+  src="/water0.jpg"
+  alt="Boats on the water in a sunrise"
+  width={700}
+  height={600}
+/>
+
+Rust’s entry API is something that isn’t often talked about, but it makes maps easier to use safely, *and* it helps eliminate redundant lookups. If you’ve ever written code like:
+
+```rust
+if let Some(mut value) = map.get(k) {
+  // do something to value
+  map.insert(k,value);
+} else {
+  map.insert(k,some_default);
+}
+```
+
+... then you’ve been *drastically* overcomplicating things. The entry API solves these problems and provides an **idiomatic and safe** alternative when working with maps (and with sets in *nightly*). In this article I’m going to cover every single aspect of the entry API in detail. To make this easier to go through I’m organizing it into smaller sections, each as self contained as possible. This means you don’t have to read every section, you can skip to the sections that cover what you need.
+
+## Availability
+
+Out of the standard collection types in Rust, the entry API is **only available in the map-like ones [`HashMap`](https://doc.rust-lang.org/std/collections/struct.HashMap.html) and [`BTreeMap`](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html)**, and it’s in *nightly* release for [`HashSet`](https://doc.rust-lang.org/std/collections/struct.HashSet.html) and [`BTreeSet`](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html), which will hopefully become stable soon.
+
+## Usage
+
+To start using the API you call [`map.entry(key)`](https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.entry), which returns an [`Entry<K,V,A>`](https://doc.rust-lang.org/std/collections/hash_map/enum.Entry.html), where `K` is the type of the collection's key, `V` is the type of the collection's value, and `A` is the type of the collection's allocator. In practice you don't really need to worry about the allocator. There are two variants *Occupied* and *Vacant*, and each contains its own type, [`OccupiedEntry`](https://doc.rust-lang.org/std/collections/hash_map/struct.OccupiedEntry.html) and [`VacantEntry`](https://doc.rust-lang.org/std/collections/hash_map/struct.VacantEntry.html) respectively. **Each implementor of the entry API creates their own structs** for these but with some small exceptions, *they are identical*. I’ll highlight any differences as they come up. All the links I give will be in relation to the `HashMap` flavoured types, but equivalents exist with their respective collection types. To try and make things a little clearer look at the structure of each variant of a `HashMap` `Entry` by printing them:
+
+```rust
+use std::collections::HashMap;
+
+let mut m = HashMap::from([
+  ("foo", "bar")
+]);
+
+
+let foo_ent = &m.entry("foo");
+println!("{foo_ent:#?}");
+let baz_ent = &m.entry("baz");
+println!("{baz_ent:#?}");
+```
+
+```txt
+Entry(
+ OccupiedEntry {
+  key: "foo",
+  value: "bar",
+  ..
+ },
+)
+Entry(
+ VacantEntry(
+  "baz",
+ ),
+)
+```
+
+At their core these are *very simple* types, with an `OccupiedEntry` containing a key and a value, and a `VacantEntry` just containing a key. **These fields are all private, so the only way to interact with them is through the functions implemented on each type**.
+
+### What about traits?
+
+There are **no traits** for this API which is atypical for the standard library. This comes down to a limitation in the type system, the exact reason is out of scope for this article, but you can read more [here](https://stackoverflow.com/questions/67767207/why-are-trait-methods-with-generic-type-parameters-object-unsafe). The lack of traits is why I'm referring to it as an "API", because it's just a series of functions on related types that all work in the same way.
+
+---
+
+## `Entry` Type
+
+Let's start by looking at the behaviour of the `Entry` enum before looking at the types contained in either of its implementors.
+
+### Getting the Key
+
+To get the key associated with a given `Entry` you just have to call `entry.key()` which will return a **non-mutable reference** to the key of type `&K`.
+
+```rust
+let mut map = HashMap::from([
+  ("foo", 999)
+]);
+
+assert_eq!(map.entry("foo").key(), &"foo");
+assert_eq!(map.entry("bar").key(), &"bar");
+```
+
+This is the **only way to get access to the key from the `Entry`** directly. There is no way to get a mutable reference to the key *anywhere* in the API, and there is no way to take ownership from an `Entry`. Taking ownership means *removing* the key from the map, which you can only do with an `OccupiedEntry`.
+
+### Unwrapping Entries
+
+There are a few different ways to *safely* unwrap an `Entry`, depending on exactly the kind of behaviour you want. Each of these methods uses some way of determining a default for a `VacantEntry` and unwrap an `OccupiedEntry` into a mutable reference to the value `&mut V`. You might notice that *even* on a `VacantEntry` it's returning a reference, this is because **if the value is *Vacant* it inserts the default, and returns a reference to the newly inserted value**. If you *don't* want the `HashMap` to change but you want to use a default if the key isn't present, use `map.get(key).unwrap_or(&default)` or one of the many unwrap variants if you don't want a static value. This is what makes the Entry API so useful, it lets you access and modify positions in the collection **in-place**, it's *sort of* like if you were accessing the value of a hashmap by reference in a language like C or C++.
+
+The simplest method is [`or_default`](https://doc.rust-lang.org/std/collections/hash_map/enum.Entry.html#method.or_default), which doesn’t take any arguments but requires `V` to implement [`std::default::Default`](https://doc.rust-lang.org/std/default/trait.Default.html).
+
+```rust
+let mut map = HashMap::from([
+  (42, 16)
+]);
+
+assert_eq!(
+ &16, // Return type is &mut integer so we need to borrow
+ map.entry(42).or_default(), // Occupied, evaluates to entry value
+);
+assert_eq!(
+ &0,
+ map.entry(24).or_default(), // Vacant, evaluates to the integer default of 0
+);
+```
+
+That’s the easiest option *if* it works for you, but it doesn’t work for all possible types of `V`. If you don’t want `V`’s default or if it doesn’t have one, then there’s [`or_insert`](https://doc.rust-lang.org/std/collections/hash_map/enum.Entry.html#method.or_insert) which takes an argument of type `V`, which acts as a static default.
+
+```rust
+let mut map = HashMap::from([
+  (42, 16)
+]);
+
+assert_eq!(
+ &16, // Return type is &mut integer so we need to borrow
+ map.entry(42).or_insert(64), // Occupied, returns the entry value
+);
+assert_eq!(
+ &64,
+ map.entry(24).or_insert(64), // Vacant, returns the provided default of 64
+);
+```
+
+Sometimes a static value isn’t enough, and you need the default to be dynamic, maybe even derived from some *other* value. That’s where [`or_insert_with`](https://doc.rust-lang.org/std/collections/hash_map/enum.Entry.html#method.or_insert_with) comes in, it takes a closure with no arguments that returns a `V`, which acts as the default.
+
+```rust
+let computed = 12;
+let mut map = HashMap::from([
+  (42, 16)
+]);
+
+assert_eq!(
+ &16, // Return type is &mut integer so we need to borrow
+ map.entry(42).or_insert_with(|| computed/2), // Occupied, returns entry value
+);
+assert_eq!(
+ &6,
+ map.entry(24).or_insert_with(|| computed/2), // Vacant, returns the value that is returned by the function, in this case 6
+);
+```
+
+Last is [`or_insert_with_key`](https://doc.rust-lang.org/std/collections/hash_map/enum.Entry.html#method.or_insert_with_key), which takes a closure that takes an argument of type `&K` and returns a `V`, allowing for defaults derived from the key.
+
+```rust
+let mut map = HashMap::from([
+  (42, 16)
+]);
+
+assert_eq!(
+ &16, // Return type is &mut integer so we need to borrow
+ map.entry(42).or_insert_with_key(|k| *k*2), // Occupied, returns entry value
+);
+assert_eq!(
+ &48,
+ map.entry(24).or_insert_with_key(|k| *k*2), // Returns the value that is returned by the function, in this case 48
+);
+```
+
+Practically speaking, these functions shine if all you want to do is insert a sane default if one does not exist, and then work with the value with **no more modification to the collection**.
+
+### In Place Modification
+
+Sometimes you don’t just want to unwrap, but you know that *if* the entry is `Occupied` you want to perform some operation on it. The `and_modify` function is the answer, it's basically the equivalent of a `.map` for an `Entry` but with one key difference. It takes a closure as an argument, which itself **takes an argument of type `&mut V` and returns nothing**. In the closure the value can be modified in place, for example:
+
+```rust
+let mut map = HashMap::from([
+  (42, 16)
+]);
+
+print!("{:#?}", map.entry(42).and_modify(|e| *e = *e*3));
+print!("{:#?}", map.entry(24).and_modify(|e| *e = *e*3));
+```
+
+```txt
+Entry(
+ OccupiedEntry {
+  key: 42,
+  value: 48,
+  ..
+ },
+)Entry(
+ VacantEntry(
+  24,
+ ),
+)
+```
+
+There is a similar method [insert_entry](https://doc.rust-lang.org/std/collections/hash_map/enum.Entry.html#method.insert_entry) which just inserts a given value `V`  **whether or not it's occupied** and returns an `OccupiedEntry`. This is useful when you aren't looking for a value but need to set a specific key to some specific starting value to do more modification on later.
+
+```rust
+let mut map = HashMap::from([
+  (42, 16)
+]);
+
+print!("{:#?}", map.entry(42).insert_entry(72));
+```
+
+```txt
+OccupiedEntry {
+    key: 42,
+    value: 72,
+    ..
+}
+```
+
+These are useful on their own, but they *really* shine when chained together:
+
+```rust
+let mut map = HashMap::from([
+  (42, 16)
+]);
+
+assert_eq!(
+    &40, // Return type is &mut integer so we need to borrow
+    map.entry(42)
+        .and_modify(|e| *e += 24)
+        .or_default(),
+);
+assert_eq!(
+    &40,
+    map.get(&42).unwrap(), // Map is changed
+);
+```
+
+The equivalent without using an `Entry` would look something like this:
+
+```rust
+let mut map = HashMap::from([
+  (42, 16)
+]);
+
+let value = if let Some(e) = map.get(&42) {
+  e + 24
+} else {
+  Default::default()
+};
+map.insert(42, value);
+
+assert_eq!(
+  40,
+  value,
+);
+assert_eq!(
+    Some(&40),
+    map.get(&42), // Map is changed
+);
+```
+
+There are other ways of writing that, but as you can see it's a *much* more complex task without using an `Entry`. Not only is it more to write, but it's *much more* likely to accidentally have scenarios where the map doesn't get correctly updated. The Entry API is the way to tell Rust to make sure the value you've pulled from a map keeps the source updated. Once you unwrap it, it no longer updates the source and can be modified without changing the original collection.
+
+## Occupied Entries
+
+### Extracting Values
+
+Like the `Entry` type, the `OccupiedEntry` type provides a [`key`](https://doc.rust-lang.org/std/collections/hash_map/struct.OccupiedEntry.html#method.key) function to return a reference to the key. This is the *only* way to get the key without removing the entry, you **cannot get ownership of the key without removal.**
+
+```rust
+use std::collections::{HashMap, hash_map::Entry};
+
+let mut map = HashMap::from([
+  (32, 64)
+]);
+
+if let Entry::Occupied(occupied) = map.entry(32) {
+ assert_eq!(occupied.key(), &32);
+} else {
+ panic!("Unexpected vacancy");
+}
+```
+
+There is also the [`into_mut`](https://doc.rust-lang.org/std/collections/hash_map/struct.OccupiedEntry.html#method.into_mut) method, which returns `&mut V` but *it consumes the `OccupiedEntry`*. Here’s what that looks like:
+
+```rust
+use std::collections::{HashMap,hash_map::Entry};
+
+let mut map = HashMap::from([
+  (32, 64)
+]);
+
+if let Entry::Occupied(mut occupied) = map.entry(32) {
+ let mut value = occupied.into_mut();
+
+ *value = 128; // We can assign to value
+ assert_eq!(map[&32], 128); // The reference is mutable so it updates
+
+ let value = occupied.get(); // Error: Borrow of moved value, will not compile with this line
+} else {
+ panic!("Unexpected vacancy");
+}
+```
+
+The `get` and `get_mut` methods return `&T` and `&mut T` respectively but *do not* consume the `OccupiedEntry`.
+
+```rust
+use std::collections::{HashMap,hash_map::Entry};
+
+let mut map = HashMap::from([
+  (32, 64)
+]);
+
+if let Entry::Occupied(mut entry) = map.entry(32) {
+  assert_eq!(&64, entry.get());
+
+  let value = entry.get_mut();
+  *value += 12;
+  // Re-assign and dereference to get the
+  // value while dropping the mutable reference
+  let value = *value;
+  // Required to compile with the `get` in the `assert_eq`
+
+  assert_eq!(&value, entry.get())
+}
+```
+
+### Modifying Values
+
+There are 3 functions that allow you to modify an `OccupiedEntry`, [`insert`](https://doc.rust-lang.org/std/collections/hash_map/struct.OccupiedEntry.html#method.insert), [`remove`](https://doc.rust-lang.org/std/collections/hash_map/struct.OccupiedEntry.html#method.remove), and [`remove_entry`](https://doc.rust-lang.org/std/collections/hash_map/struct.OccupiedEntry.html#method.remove_entry). `insert` takes a new value and updates the entry with the new value *without* consuming the `OccupiedEntry`, and it also returns the old value. This saves you a lookup if you wanted to get the old value before updating, and if you didn’t need it then you can just discard the value.
+
+```rust
+let mut map = HashMap::from([
+  (32, 64)
+]);
+
+if let Entry::Occupied(mut occupied) = map.entry(32) {
+ let prev = occupied.insert(128);
+ assert_eq!(occupied.get(), &128); // Value is updated
+ assert_eq!(prev, 64); // Old value returned
+
+ occupied.insert(32); // Old value discarded
+} else {
+ panic!("Unexpected vacancy");
+}
+```
+
+The `remove` function deletes the entry, returns the old value, and *consumes* the `OccupiedEntry`.
+
+```rust
+use std::collections::hash_map::Entry;
+
+let mut map = HashMap::from([
+  (32, 64)
+]);
+
+if let Entry::Occupied(occupied) = map.entry(32) {
+ let prev = occupied.remove();
+ assert_eq!(prev, 64); // Old value returned
+
+ occupied.get(); // Error: Borrow of moved value, will not compile with this line
+} else {
+ panic!("Unexpected vacancy");
+}
+assert_eq!(map.get(&32), None); // Entry is removed
+```
+
+`remove_entry` is similar to `remove` but with one key difference, it **returns both the key and the value of the removed entry in a tuple**. `remove` and `insert` will be enough for *most* cases, but it’s nice to know that `remove_entry` is available if you need to remove an entry and get the key-value pair.
+
+```rust
+use std::collections::hash_map::Entry;
+
+let mut map = HashMap::from([
+  (32, 64)
+]);
+
+if let Entry::Occupied(occupied) = map.entry(32) {
+ let prev = occupied.remove_entry();
+ assert_eq!(prev, (32, 64)); // Old key and value returned in a tuple
+
+ occupied.get(); // Error: Borrow of moved value, will not compile with this line
+} else {
+ panic!("Unexpected vacancy");
+}
+assert_eq!(map.get(&32), None); // Entry is removed
+```
+
+## Vacant Entries
+
+The `VacantEntry` type is *much* simpler than an `OccupiedEntry`, with only 4 functions. It has the same [`key`](https://doc.rust-lang.org/std/collections/hash_map/struct.VacantEntry.html#method.key) functions as the other types, returning a reference to the key without consuming the `VacantEntry`. Unlike the other types, a `VacantEntry` contains [`into_key`](https://doc.rust-lang.org/std/collections/hash_map/struct.VacantEntry.html#method.into_key), which takes ownership of the key and consumes the `VacantEntry`.
+
+```rust
+use std::collections::{HashMap,hash_map::Entry};
+let mut map: HashMap<i32,i32> = HashMap::new();
+
+if let Entry::Vacant(mut vacant) = map.entry(32) {
+ assert_eq!(vacant.key(), &32);
+ assert_eq!(vacant.into_key(), 32);
+
+ vacant.key(); // Error: Borrow of moved value, will not compile with this line
+} else {
+ panic!("Unexpected occupancy");
+}
+```
+
+There is also the [`insert`](https://doc.rust-lang.org/std/collections/hash_map/struct.VacantEntry.html#method.insert) function, which takes a `V` and inserts it into the map, *consumes* the `VacantEntry`, and returns a **mutable reference** to the value just inserted. It has one variant, [`insert_entry`](https://doc.rust-lang.org/std/collections/hash_map/struct.VacantEntry.html#method.insert_entry), which also takes a `V` and *consumes* the `VacantEntry`, but it **returns an `OccupiedEntry`** instead of just a reference to the value itself. This is super useful if you still want to continue operations on this entry, calling `insert` is basically *opting out* of the Entry API after that point.
+
+```rust
+use std::collections::{HashMap,hash_map::Entry};
+
+let mut map: HashMap<i32,i32> = HashMap::new();
+
+if let Entry::Vacant(vacant) = map.entry(32) {
+ let value = vacant.insert(64);
+ assert_eq!(*value, 64); // A mutable reference is returned
+
+ *value = 128;
+ assert_eq!(map[&32], 128); // Reference is mutable, so assignment works
+
+ vacant.key(); // Error: Borrow of moved value, will not compile with this line
+} else {
+ panic!("Unexpected occupancy");
+}
+
+if let Entry::Vacant(vacant) = map.entry(16) {
+ let mut occupied = vacant.insert_entry(64);
+ assert_eq!(occupied.get(), &64); // OccupiedEntry is returned
+
+ occupied.insert(128);
+ assert_eq!(map[&16], 128); // Reference is mutable, so assignment works
+
+ vacant.key(); // Error: Borrow of moved value, will not compile with this line
+} else {
+ panic!("Unexpected occupancy");
+}
+```
+
+The set types, `HashSet` and `BTreeSet`, don’t have any implementations of `insert_entry` on their `VacantEntries`. As of writing the entire entry API is *unstable* for these types, so it’s likely they’ll get an implementation at some point in the future.
+
+## Conclusion
+
+That is the complete Entry API as of time of writing, but it is *likely* to change in future. This is probably why it doesn't get talked about much, but this *should* change. The API is stable for `HashMap` and `BTreeMap` now so it's definitely worth trying out. **It's not made to fit every task** you might need to do with a `HashMap`, but the Entry API *really* shines when you understand where to use it. Like many other features in Rust, it might seem strange at first but hopefully now you can agree: **once you understand it, it's actually incredibly elegant**.
